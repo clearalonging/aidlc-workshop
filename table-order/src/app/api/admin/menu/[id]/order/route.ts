@@ -5,17 +5,17 @@ import { validateBody } from '@/lib/middleware/validate-body';
 import { menuSwapOrderSchema } from '@/lib/validators/common-schemas';
 import { MenuService } from '@/lib/services/menu-service';
 
-interface RouteParams {
-  params: { id: string };
-}
-
 /**
  * PATCH /api/admin/menu/[id]/order — 메뉴 순서 위/아래 이동 (AS-14)
  */
-export async function PATCH(request: NextRequest, { params }: RouteParams) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const payload = authenticateAdmin(request);
-    const menuId = Number(params.id);
+    const { id } = await params;
+    const menuId = Number(id);
     const validation = await validateBody(request, menuSwapOrderSchema);
     if (!validation.success) {
       return validation.response;

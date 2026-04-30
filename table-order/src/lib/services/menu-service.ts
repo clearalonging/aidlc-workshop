@@ -262,29 +262,40 @@ export class MenuService {
         throw new NotFoundError('메뉴');
       }
 
-      const adjacent = await tx.menuItem.findFirst({
-        where: {
-          storeId,
-          categoryId: current.categoryId,
-          sortOrder: direction === 'up'
-            ? { lt: current.sortOrder }
-            : { gt: current.sortOrder },
-        },
-        orderBy: {
-          sortOrder: direction === 'up' ? 'desc' : 'asc',
-        },
+      // 같은 카테고리 내 모든 메뉴를 정렬 순서대로 가져옴
+      const allItems = await tx.menuItem.findMany({
+        where: { storeId, categoryId: current.categoryId },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
       });
 
-      if (!adjacent) return;
+      const currentIndex = allItems.findIndex((item) => item.id === current.id);
+      if (currentIndex === -1) return;
 
-      await tx.menuItem.update({
-        where: { id: current.id },
-        data: { sortOrder: adjacent.sortOrder },
-      });
-      await tx.menuItem.update({
-        where: { id: adjacent.id },
-        data: { sortOrder: current.sortOrder },
-      });
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= allItems.length) return;
+
+      const adjacent = allItems[targetIndex];
+
+      // sortOrder 교환 (같은 값이면 id 기반으로 강제 교환)
+      const currentSort = current.sortOrder;
+      const adjacentSort = adjacent.sortOrder;
+
+      if (currentSort === adjacentSort) {
+        // 같은 sortOrder인 경우: 강제로 다른 값 할당
+        await tx.menuItem.update({
+          where: { id: current.id },
+          data: { sortOrder: adjacentSort + (direction === 'up' ? -1 : 1) },
+        });
+      } else {
+        await tx.menuItem.update({
+          where: { id: current.id },
+          data: { sortOrder: adjacentSort },
+        });
+        await tx.menuItem.update({
+          where: { id: adjacent.id },
+          data: { sortOrder: currentSort },
+        });
+      }
     });
 
     logger.info(

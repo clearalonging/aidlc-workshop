@@ -159,6 +159,13 @@ export default function AdminDashboardPage() {
           <h1 className="text-xl font-bold text-gray-800">주문 대시보드</h1>
           <div className="flex items-center gap-4">
             <button
+              onClick={() => router.push('/menu-manage')}
+              className="text-sm text-blue-600 hover:underline"
+              data-testid="dashboard-menu-manage-link"
+            >
+              메뉴 관리
+            </button>
+            <button
               onClick={() => router.push('/tables')}
               className="text-sm text-blue-600 hover:underline"
               data-testid="dashboard-tables-link"
