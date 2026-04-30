@@ -19,8 +19,8 @@ export default function CustomerLayout({
 
   useEffect(() => {
     const token = localStorage.getItem('table-token');
-    if (!token && pathname !== '/login') {
-      router.replace('/login');
+    if (!token && pathname !== '/table-login') {
+      router.replace('/table-login');
       setIsAuthenticated(false);
     } else {
       setIsAuthenticated(true);
@@ -28,7 +28,7 @@ export default function CustomerLayout({
   }, [pathname, router]);
 
   // 로그인 페이지에서는 네비게이션 숨김
-  if (pathname === '/login') {
+  if (pathname === '/table-login') {
     return <>{children}</>;
   }
 
