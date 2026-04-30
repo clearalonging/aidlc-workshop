@@ -1,14 +1,19 @@
 import { prisma } from '@/lib/prisma';
+import { sseManager } from '@/lib/sse/sse-manager';
 import { NotFoundError, BadRequestError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
-import { sseManager } from '@/lib/sse/sse-manager';
-import type { OrderItemInput } from '@/types';
+import type { OrderItemInput, OrderStatus } from '@/types';
+import type { OrderItemSummary, OrderSummary } from './table-service';
 
-/**
- * 주문 서비스 (생성/조회)
- * Unit 2: Customer Order
- * CS-09, CS-10, CS-11, CS-12, CS-13 관련
- */
+// ─── 상태 전이 규칙 ───────────────────────────────────────────────────────────
+
+const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus | null> = {
+  PENDING: 'PREPARING',
+  PREPARING: 'COMPLETED',
+  COMPLETED: null,
+};
+
+// ─── 고객용 타입 (Unit 2: Customer Order) ────────────────────────────────────
 
 export interface OrderWithItems {
   id: number;
@@ -24,6 +29,15 @@ export interface OrderWithItems {
   }[];
 }
 
+// ─── 관리자용 타입 (Unit 3: Admin Monitor) ───────────────────────────────────
+
+export interface OrderDetail extends OrderSummary {
+  tableId: number;
+  sessionId: string;
+}
+
+// ─── 내부 헬퍼 함수 ───────────────────────────────────────────────────────────
+
 /**
  * 주문 번호 생성
  * 형식: ORD-{YYYYMMDD}-{4자리 순번}
@@ -33,11 +47,8 @@ async function generateOrderNumber(): Promise<string> {
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
   const prefix = `ORD-${dateStr}-`;
 
-  // 오늘 날짜의 마지막 주문 번호 조회
   const lastOrder = await prisma.order.findFirst({
-    where: {
-      orderNumber: { startsWith: prefix },
-    },
+    where: { orderNumber: { startsWith: prefix } },
     orderBy: { orderNumber: 'desc' },
     select: { orderNumber: true },
   });
@@ -56,7 +67,6 @@ async function generateOrderNumber(): Promise<string> {
  * BR-SESSION-01: 첫 주문 시 세션 자동 시작
  */
 async function getOrCreateSession(tableId: number): Promise<string> {
-  // 활성 세션 확인
   const activeSession = await prisma.tableSession.findFirst({
     where: { tableId, completedAt: null },
   });
@@ -65,7 +75,6 @@ async function getOrCreateSession(tableId: number): Promise<string> {
     return activeSession.id;
   }
 
-  // 새 세션 생성
   const newSession = await prisma.tableSession.create({
     data: { tableId },
   });
@@ -74,23 +83,19 @@ async function getOrCreateSession(tableId: number): Promise<string> {
   return newSession.id;
 }
 
+// ─── 고객용 함수 (Unit 2: Customer Order) ────────────────────────────────────
+
 /**
- * 주문 생성
- * CS-09: 주문 확정
+ * 주문 생성 (CS-09)
  */
 export async function createOrder(
   tableId: number,
   storeId: string,
   items: OrderItemInput[],
 ): Promise<OrderWithItems> {
-  // 1. 메뉴 유효성 검증
   const menuItemIds = items.map((item) => item.menuItemId);
   const menuItems = await prisma.menuItem.findMany({
-    where: {
-      id: { in: menuItemIds },
-      storeId,
-      isAvailable: true,
-    },
+    where: { id: { in: menuItemIds }, storeId, isAvailable: true },
   });
 
   if (menuItems.length !== menuItemIds.length) {
@@ -101,13 +106,9 @@ export async function createOrder(
     );
   }
 
-  // 2. 세션 확인/생성
   const sessionId = await getOrCreateSession(tableId);
-
-  // 3. 주문 번호 생성
   const orderNumber = await generateOrderNumber();
 
-  // 4. 금액 계산 및 주문 항목 준비
   const menuMap = new Map(menuItems.map((m) => [m.id, m]));
   let totalAmount = 0;
   const orderItemsData = items.map((item) => {
@@ -122,25 +123,17 @@ export async function createOrder(
     };
   });
 
-  // 5. 트랜잭션으로 주문 저장
   const order = await prisma.order.create({
     data: {
       orderNumber,
       tableId,
       sessionId,
       totalAmount,
-      orderItems: {
-        create: orderItemsData,
-      },
+      orderItems: { create: orderItemsData },
     },
     include: {
       orderItems: {
-        select: {
-          id: true,
-          menuItemName: true,
-          unitPrice: true,
-          quantity: true,
-        },
+        select: { id: true, menuItemName: true, unitPrice: true, quantity: true },
       },
     },
   });
@@ -150,7 +143,6 @@ export async function createOrder(
     'Order created',
   );
 
-  // 6. SSE 브로드캐스트 (관리자 대시보드 실시간 업데이트)
   const table = await prisma.table.findUnique({
     where: { id: tableId },
     select: { tableNumber: true },
@@ -177,12 +169,9 @@ export async function createOrder(
 }
 
 /**
- * 현재 세션 주문 내역 조회
- * CS-12: 현재 세션 주문 내역 조회
- * CS-13: 주문 상태 확인
+ * 현재 세션 주문 내역 조회 (CS-12, CS-13)
  */
-export async function getOrdersBySession(tableId: number): Promise<OrderWithItems[]> {
-  // 활성 세션 조회
+export async function getCustomerOrdersBySession(tableId: number): Promise<OrderWithItems[]> {
   const activeSession = await prisma.tableSession.findFirst({
     where: { tableId, completedAt: null },
   });
@@ -196,12 +185,7 @@ export async function getOrdersBySession(tableId: number): Promise<OrderWithItem
     orderBy: { createdAt: 'asc' },
     include: {
       orderItems: {
-        select: {
-          id: true,
-          menuItemName: true,
-          unitPrice: true,
-          quantity: true,
-        },
+        select: { id: true, menuItemName: true, unitPrice: true, quantity: true },
       },
     },
   });
@@ -213,5 +197,130 @@ export async function getOrdersBySession(tableId: number): Promise<OrderWithItem
     totalAmount: order.totalAmount,
     createdAt: order.createdAt,
     orderItems: order.orderItems,
+  }));
+}
+
+// ─── 관리자용 함수 (Unit 3: Admin Monitor) ───────────────────────────────────
+
+/**
+ * 주문 상태를 다음 단계로 변경합니다. (AS-05)
+ * 상태 전이: PENDING → PREPARING → COMPLETED (역방향 불가)
+ */
+export async function updateOrderStatus(
+  orderId: number,
+  newStatus: OrderStatus,
+): Promise<OrderDetail> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      orderItems: {
+        select: { id: true, menuItemName: true, unitPrice: true, quantity: true },
+      },
+      table: { select: { tableNumber: true, storeId: true } },
+    },
+  });
+
+  if (!order) {
+    throw new NotFoundError('주문');
+  }
+
+  const allowedNext = STATUS_TRANSITIONS[order.status as OrderStatus];
+  if (allowedNext !== newStatus) {
+    if (order.status === newStatus) {
+      throw new BadRequestError(`이미 ${newStatus} 상태입니다.`);
+    }
+    throw new BadRequestError(
+      `${order.status} 상태에서 ${newStatus}(으)로 변경할 수 없습니다.`,
+    );
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { status: newStatus },
+    include: {
+      orderItems: {
+        select: { id: true, menuItemName: true, unitPrice: true, quantity: true },
+      },
+    },
+  });
+
+  logger.info(
+    { orderId, previousStatus: order.status, newStatus },
+    'Order status updated',
+  );
+
+  sseManager.broadcast('order-status-changed', {
+    orderId,
+    tableId: order.tableId,
+    tableNumber: order.table.tableNumber,
+    previousStatus: order.status,
+    newStatus,
+    updatedAt: updated.updatedAt.toISOString(),
+  });
+
+  const items: OrderItemSummary[] = updated.orderItems;
+
+  return {
+    id: updated.id,
+    orderNumber: updated.orderNumber,
+    status: updated.status as OrderStatus,
+    totalAmount: updated.totalAmount,
+    createdAt: updated.createdAt,
+    updatedAt: updated.updatedAt,
+    items,
+    tableId: order.tableId,
+    sessionId: order.sessionId,
+  };
+}
+
+/**
+ * 주문 삭제 (AS-08)
+ */
+export async function deleteOrder(orderId: number): Promise<void> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { table: { select: { tableNumber: true } } },
+  });
+
+  if (!order) {
+    throw new NotFoundError('주문');
+  }
+
+  await prisma.order.delete({ where: { id: orderId } });
+
+  logger.info({ orderId, tableId: order.tableId }, 'Order deleted');
+
+  sseManager.broadcast('order-deleted', {
+    orderId,
+    tableId: order.tableId,
+    tableNumber: order.table.tableNumber,
+    deletedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * 세션별 주문 목록 조회 (관리자용)
+ */
+export async function getOrdersBySession(sessionId: string): Promise<OrderDetail[]> {
+  const orders = await prisma.order.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      orderItems: {
+        select: { id: true, menuItemName: true, unitPrice: true, quantity: true },
+      },
+    },
+  });
+
+  return orders.map((order) => ({
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status as OrderStatus,
+    totalAmount: order.totalAmount,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    items: order.orderItems,
+    tableId: order.tableId,
+    sessionId: order.sessionId,
   }));
 }
