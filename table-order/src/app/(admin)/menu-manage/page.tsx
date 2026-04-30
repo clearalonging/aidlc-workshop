@@ -23,34 +23,27 @@ interface CategoryWithMenus {
   _count: { menuItems: number };
 }
 
-/**
- * 메뉴 관리 목록 페이지 (AS-15, AS-13, AS-14)
- * 카테고리별 메뉴 테이블 + 필터 + 삭제 + 순서 변경
- */
 export default function MenuManagePage() {
   const router = useRouter();
-  const [categories, setCategories] = useState<CategoryWithMenus[]>([]);
+  const [allCategories, setAllCategories] = useState<CategoryWithMenus[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('adminToken') : null;
 
   const fetchMenus = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const url = selectedCategoryId
-        ? `/api/admin/menu?categoryId=${selectedCategoryId}`
-        : '/api/admin/menu';
-      const res = await fetch(url, {
+      const res = await fetch('/api/admin/menu', {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (data.success) {
-        setCategories(data.data);
+        setAllCategories(data.data);
       } else {
         setError(data.message || '메뉴를 불러오는데 실패했습니다.');
       }
@@ -59,11 +52,19 @@ export default function MenuManagePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCategoryId, token]);
+  }, [token]);
 
   useEffect(() => {
     fetchMenus();
   }, [fetchMenus]);
+
+  const displayCategories = selectedCategoryId
+    ? allCategories.filter((c) => c.id === selectedCategoryId)
+    : allCategories;
+
+  const categoryList = allCategories.map((c) => ({ id: c.id, name: c.name }));
+
+  const totalMenuCount = allCategories.reduce((sum, c) => sum + c.menuItems.length, 0);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -106,58 +107,80 @@ export default function MenuManagePage() {
     }
   }
 
-  const categoryList = categories.map((c) => ({ id: c.id, name: c.name }));
-
   return (
-    <div data-testid="menu-list-page" className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">메뉴 관리</h1>
-        <button
-          data-testid="menu-list-add-button"
-          onClick={() => router.push('/menu-manage/new')}
-          className="px-4 py-2.5 min-w-[44px] min-h-[44px] bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-        >
-          + 메뉴 등록
-        </button>
-      </div>
-
-      <CategoryFilter
-        categories={categoryList}
-        selectedId={selectedCategoryId}
-        onSelect={setSelectedCategoryId}
-      />
-
-      {isLoading && (
-        <div data-testid="menu-list-loading" className="text-center py-12 text-gray-500">
-          메뉴를 불러오는 중...
+    <div data-testid="menu-list-page" className="min-h-screen bg-gray-50">
+      {/* 헤더 */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">🍽️ 메뉴 관리</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              총 {totalMenuCount}개 메뉴 · {allCategories.length}개 카테고리
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="px-4 py-2.5 min-h-[44px] text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              ← 대시보드
+            </button>
+            <button
+              data-testid="menu-list-add-button"
+              onClick={() => router.push('/menu-manage/new')}
+              className="px-5 py-2.5 min-h-[44px] text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm transition-colors"
+            >
+              + 메뉴 등록
+            </button>
+          </div>
         </div>
-      )}
+      </header>
 
-      {error && (
-        <div data-testid="menu-list-error" role="alert" className="p-4 bg-red-50 text-red-700 rounded-md mb-4">
-          {error}
+      {/* 본문 */}
+      <main className="max-w-6xl mx-auto px-6 py-6">
+        <CategoryFilter
+          categories={categoryList}
+          selectedId={selectedCategoryId}
+          onSelect={setSelectedCategoryId}
+        />
+
+        {isLoading && (
+          <div data-testid="menu-list-loading" className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <div className="w-8 h-8 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
+            <p>메뉴를 불러오는 중...</p>
+          </div>
+        )}
+
+        {error && (
+          <div data-testid="menu-list-error" role="alert" className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 mb-6">
+            {error}
+          </div>
+        )}
+
+        {!isLoading && !error && displayCategories.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <span className="text-5xl mb-4">📋</span>
+            <p className="text-lg font-medium text-gray-500">등록된 메뉴가 없습니다</p>
+            <p className="text-sm text-gray-400 mt-1">메뉴 등록 버튼을 눌러 첫 메뉴를 추가하세요</p>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {!isLoading &&
+            displayCategories.map((category) => (
+              <MenuTable
+                key={category.id}
+                menuItems={category.menuItems}
+                categoryName={category.name}
+                categoryId={category.id}
+                onEdit={(id) => router.push(`/menu-manage/${id}/edit`)}
+                onDelete={(item) => setDeleteTarget(item)}
+                onMoveUp={(id) => handleMoveOrder(id, 'up')}
+                onMoveDown={(id) => handleMoveOrder(id, 'down')}
+              />
+            ))}
         </div>
-      )}
-
-      {!isLoading && !error && categories.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          등록된 메뉴가 없습니다.
-        </div>
-      )}
-
-      {!isLoading &&
-        categories.map((category) => (
-          <MenuTable
-            key={category.id}
-            menuItems={category.menuItems}
-            categoryName={category.name}
-            categoryId={category.id}
-            onEdit={(id) => router.push(`/menu-manage/${id}/edit`)}
-            onDelete={(item) => setDeleteTarget(item)}
-            onMoveUp={(id) => handleMoveOrder(id, 'up')}
-            onMoveDown={(id) => handleMoveOrder(id, 'down')}
-          />
-        ))}
+      </main>
 
       <MenuDeleteConfirm
         item={deleteTarget}

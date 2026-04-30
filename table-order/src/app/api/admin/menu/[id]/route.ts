@@ -5,17 +5,17 @@ import { validateBody } from '@/lib/middleware/validate-body';
 import { updateMenuItemSchema } from '@/lib/validators/common-schemas';
 import { MenuService } from '@/lib/services/menu-service';
 
-interface RouteParams {
-  params: { id: string };
-}
-
 /**
  * GET /api/admin/menu/[id] — 메뉴 상세 조회 (AS-15)
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const payload = authenticateAdmin(request);
-    const menuId = Number(params.id);
+    const { id } = await params;
+    const menuId = Number(id);
 
     const menu = await MenuService.getMenuById(menuId, payload.storeId);
 
@@ -27,12 +27,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 /**
  * PUT /api/admin/menu/[id] — 메뉴 수정 (AS-12)
- * SECURITY-05: Zod partial 입력 검증
  */
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const payload = authenticateAdmin(request);
-    const menuId = Number(params.id);
+    const { id } = await params;
+    const menuId = Number(id);
     const validation = await validateBody(request, updateMenuItemSchema);
     if (!validation.success) {
       return validation.response;
@@ -49,10 +52,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 /**
  * DELETE /api/admin/menu/[id] — 메뉴 삭제 (AS-13)
  */
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const payload = authenticateAdmin(request);
-    const menuId = Number(params.id);
+    const { id } = await params;
+    const menuId = Number(id);
 
     await MenuService.deleteMenu(menuId, payload.storeId);
 

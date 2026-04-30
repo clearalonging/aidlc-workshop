@@ -17,7 +17,7 @@ export default function NewMenuPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('adminToken') : null;
 
   useEffect(() => {
     async function fetchCategories() {
