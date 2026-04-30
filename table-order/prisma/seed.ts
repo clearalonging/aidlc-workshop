@@ -31,45 +31,37 @@ async function main() {
   console.log(`✅ 관리자 계정 생성: ${admin.username}`);
 
   // 3. 카테고리 생성
-  const categories = await Promise.all([
-    prisma.category.upsert({
-      where: { id: 1 },
-      update: {},
-      create: { storeId: store.id, name: '메인 메뉴', sortOrder: 1 },
+  const [cat1, cat2, cat3, cat4] = await Promise.all([
+    prisma.category.create({
+      data: { storeId: store.id, name: '메인 메뉴', sortOrder: 1 },
     }),
-    prisma.category.upsert({
-      where: { id: 2 },
-      update: {},
-      create: { storeId: store.id, name: '사이드', sortOrder: 2 },
+    prisma.category.create({
+      data: { storeId: store.id, name: '사이드', sortOrder: 2 },
     }),
-    prisma.category.upsert({
-      where: { id: 3 },
-      update: {},
-      create: { storeId: store.id, name: '음료', sortOrder: 3 },
+    prisma.category.create({
+      data: { storeId: store.id, name: '음료', sortOrder: 3 },
     }),
-    prisma.category.upsert({
-      where: { id: 4 },
-      update: {},
-      create: { storeId: store.id, name: '디저트', sortOrder: 4 },
+    prisma.category.create({
+      data: { storeId: store.id, name: '디저트', sortOrder: 4 },
     }),
   ]);
-  console.log(`✅ 카테고리 생성: ${categories.length}개`);
+  console.log(`✅ 카테고리 생성: 4개`);
 
   // 4. 샘플 메뉴 생성
   const menuItems = [
     // 메인 메뉴
-    { storeId: store.id, categoryId: 1, name: '불고기 덮밥', price: 12000, description: '달콤한 불고기와 밥', sortOrder: 1 },
-    { storeId: store.id, categoryId: 1, name: '제육볶음 정식', price: 13000, description: '매콤한 제육볶음', sortOrder: 2 },
-    { storeId: store.id, categoryId: 1, name: '김치찌개', price: 10000, description: '얼큰한 김치찌개', sortOrder: 3 },
+    { storeId: store.id, categoryId: cat1.id, name: '불고기 덮밥', price: 12000, description: '달콤한 불고기와 밥', sortOrder: 1 },
+    { storeId: store.id, categoryId: cat1.id, name: '제육볶음 정식', price: 13000, description: '매콤한 제육볶음', sortOrder: 2 },
+    { storeId: store.id, categoryId: cat1.id, name: '김치찌개', price: 10000, description: '얼큰한 김치찌개', sortOrder: 3 },
     // 사이드
-    { storeId: store.id, categoryId: 2, name: '계란말이', price: 4000, description: '부드러운 계란말이', sortOrder: 1 },
-    { storeId: store.id, categoryId: 2, name: '감자튀김', price: 3000, description: '바삭한 감자튀김', sortOrder: 2 },
+    { storeId: store.id, categoryId: cat2.id, name: '계란말이', price: 4000, description: '부드러운 계란말이', sortOrder: 1 },
+    { storeId: store.id, categoryId: cat2.id, name: '감자튀김', price: 3000, description: '바삭한 감자튀김', sortOrder: 2 },
     // 음료
-    { storeId: store.id, categoryId: 3, name: '아메리카노', price: 3000, description: '진한 아메리카노', sortOrder: 1 },
-    { storeId: store.id, categoryId: 3, name: '콜라', price: 2000, description: '시원한 콜라', sortOrder: 2 },
-    { storeId: store.id, categoryId: 3, name: '오렌지 주스', price: 3500, description: '신선한 오렌지 주스', sortOrder: 3 },
+    { storeId: store.id, categoryId: cat3.id, name: '아메리카노', price: 3000, description: '진한 아메리카노', sortOrder: 1 },
+    { storeId: store.id, categoryId: cat3.id, name: '콜라', price: 2000, description: '시원한 콜라', sortOrder: 2 },
+    { storeId: store.id, categoryId: cat3.id, name: '오렌지 주스', price: 3500, description: '신선한 오렌지 주스', sortOrder: 3 },
     // 디저트
-    { storeId: store.id, categoryId: 4, name: '아이스크림', price: 3000, description: '달콤한 아이스크림', sortOrder: 1 },
+    { storeId: store.id, categoryId: cat4.id, name: '아이스크림', price: 3000, description: '달콤한 아이스크림', sortOrder: 1 },
   ];
 
   for (const item of menuItems) {
