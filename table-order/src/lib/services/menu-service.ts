@@ -3,6 +3,98 @@ import { NotFoundError, BadRequestError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import type { MenuItemInput, UpdateMenuItemInput } from '@/lib/validators/common-schemas';
 
+// ─── 고객용 타입 ──────────────────────────────────────────────────────────────
+
+export interface MenuWithCategory {
+  id: number;
+  name: string;
+  price: number;
+  description: string | null;
+  imageUrl: string | null;
+  sortOrder: number;
+  categoryId: number;
+  category: {
+    id: number;
+    name: string;
+  };
+}
+
+export interface CategoryWithMenus {
+  id: number;
+  name: string;
+  sortOrder: number;
+  menuItems: {
+    id: number;
+    name: string;
+    price: number;
+    description: string | null;
+    imageUrl: string | null;
+    sortOrder: number;
+  }[];
+}
+
+// ─── 고객용 함수 (Unit 2: Customer Order) ────────────────────────────────────
+
+/**
+ * 카테고리별 메뉴 목록 조회 (CS-02, CS-03, CS-04)
+ * 판매 가능한 메뉴만 반환, sortOrder 기준 정렬
+ */
+export async function getMenusByCategory(storeId: string): Promise<CategoryWithMenus[]> {
+  const categories = await prisma.category.findMany({
+    where: { storeId },
+    orderBy: { sortOrder: 'asc' },
+    include: {
+      menuItems: {
+        where: { isAvailable: true },
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          description: true,
+          imageUrl: true,
+          sortOrder: true,
+        },
+      },
+    },
+  });
+
+  logger.debug({ storeId, categoryCount: categories.length }, 'Menu categories fetched');
+  return categories;
+}
+
+/**
+ * 메뉴 상세 조회 (CS-03)
+ * 판매 가능한 메뉴만 조회 가능
+ */
+export async function getMenuById(menuId: number): Promise<MenuWithCategory> {
+  const menuItem = await prisma.menuItem.findFirst({
+    where: { id: menuId, isAvailable: true },
+    include: {
+      category: {
+        select: { id: true, name: true },
+      },
+    },
+  });
+
+  if (!menuItem) {
+    throw new NotFoundError('메뉴');
+  }
+
+  return {
+    id: menuItem.id,
+    name: menuItem.name,
+    price: menuItem.price,
+    description: menuItem.description,
+    imageUrl: menuItem.imageUrl,
+    sortOrder: menuItem.sortOrder,
+    categoryId: menuItem.categoryId,
+    category: menuItem.category,
+  };
+}
+
+// ─── 관리자용 클래스 (Unit 1: Admin Menu Management) ─────────────────────────
+
 /**
  * MenuService - 메뉴 관리 비즈니스 로직
  *
@@ -58,7 +150,6 @@ export class MenuService {
    * SECURITY-08: storeId로 카테고리 소유권 확인
    */
   static async createMenu(storeId: string, data: MenuItemInput) {
-    // 카테고리 존재 확인
     const category = await prisma.category.findFirst({
       where: { id: data.categoryId, storeId },
     });
@@ -66,10 +157,8 @@ export class MenuService {
       throw new BadRequestError('존재하지 않는 카테고리입니다.');
     }
 
-    // imageUrl 빈 문자열 → null 변환
     const imageUrl = data.imageUrl === '' ? null : (data.imageUrl ?? null);
 
-    // sortOrder 미제공 시 카테고리 내 최대값 + 1
     let sortOrder = data.sortOrder ?? 0;
     if (!data.sortOrder && data.sortOrder !== 0) {
       const maxSort = await prisma.menuItem.aggregate({
@@ -105,7 +194,6 @@ export class MenuService {
    * Partial update — 제공된 필드만 업데이트
    */
   static async updateMenu(menuId: number, storeId: string, data: UpdateMenuItemInput) {
-    // 메뉴 존재 확인
     const existing = await prisma.menuItem.findFirst({
       where: { id: menuId, storeId },
     });
@@ -113,7 +201,6 @@ export class MenuService {
       throw new NotFoundError('메뉴');
     }
 
-    // 카테고리 변경 시 존재 확인
     if (data.categoryId !== undefined) {
       const category = await prisma.category.findFirst({
         where: { id: data.categoryId, storeId },
@@ -123,7 +210,6 @@ export class MenuService {
       }
     }
 
-    // imageUrl 빈 문자열 → null 변환
     const updateData: Record<string, unknown> = { ...data };
     if (data.imageUrl === '') {
       updateData.imageUrl = null;
@@ -169,7 +255,6 @@ export class MenuService {
    */
   static async swapMenuOrder(storeId: string, menuId: number, direction: 'up' | 'down') {
     await prisma.$transaction(async (tx) => {
-      // 현재 메뉴 조회
       const current = await tx.menuItem.findFirst({
         where: { id: menuId, storeId },
       });
@@ -177,7 +262,6 @@ export class MenuService {
         throw new NotFoundError('메뉴');
       }
 
-      // 인접 메뉴 찾기 (같은 카테고리 내)
       const adjacent = await tx.menuItem.findFirst({
         where: {
           storeId,
@@ -191,10 +275,8 @@ export class MenuService {
         },
       });
 
-      // 인접 메뉴 없으면 no-op (최상단/최하단)
       if (!adjacent) return;
 
-      // sortOrder 교환
       await tx.menuItem.update({
         where: { id: current.id },
         data: { sortOrder: adjacent.sortOrder },
@@ -217,7 +299,6 @@ export class MenuService {
    */
   static async updateMenuOrder(storeId: string, items: { id: number; sortOrder: number }[]) {
     await prisma.$transaction(async (tx) => {
-      // 모든 menuId가 storeId에 속하는지 확인
       const menuIds = items.map((item) => item.id);
       const existingCount = await tx.menuItem.count({
         where: { id: { in: menuIds }, storeId },
@@ -226,7 +307,6 @@ export class MenuService {
         throw new BadRequestError('존재하지 않는 메뉴가 포함되어 있습니다.');
       }
 
-      // 일괄 업데이트
       for (const item of items) {
         await tx.menuItem.update({
           where: { id: item.id },
