@@ -1,5 +1,3 @@
-import { OrderStatus } from '@prisma/client';
-
 // ─── 인증 타입 ───────────────────────────────────────────────────────────────
 
 export type UserRole = 'ADMIN' | 'TABLE';
@@ -42,9 +40,9 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-// ─── 주문 타입 ────────────────────────────────────────────────────────────────
+// ─── 주문 상태 ─────────────────────────────────────────────────────────────
 
-export { OrderStatus };
+export type OrderStatus = 'PENDING' | 'PREPARING' | 'COMPLETED';
 
 export interface OrderItemInput {
   menuItemId: number;

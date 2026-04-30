@@ -91,7 +91,7 @@ model Order {
   orderNumber String      @unique
   tableId     Int
   sessionId   String
-  status      OrderStatus @default(PENDING)
+  status      String      @default("PENDING")
   totalAmount Int
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -104,13 +104,13 @@ model Order {
 model OrderItem {
   id           Int    @id @default(autoincrement())
   orderId      Int
-  menuItemId   Int
+  menuItemId   Int?
   menuItemName String
   unitPrice    Int
   quantity     Int
 
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
 }
 
 model LoginAttempt {
@@ -120,10 +120,4 @@ model LoginAttempt {
   attemptedAt DateTime @default(now())
 
   @@index([identifier, attemptedAt])
-}
-
-enum OrderStatus {
-  PENDING
-  PREPARING
-  COMPLETED
 }

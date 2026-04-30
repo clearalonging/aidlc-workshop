@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { logger } from '@/lib/logger';
@@ -12,7 +11,7 @@ export function applyRequestLogging(
   response: NextResponse,
 ): { response: NextResponse; requestId: string } {
   const requestId =
-    (request.headers.get('x-request-id') as string) || randomUUID();
+    (request.headers.get('x-request-id') as string) || crypto.randomUUID();
 
   // 응답 헤더에 requestId 추가
   response.headers.set('x-request-id', requestId);
