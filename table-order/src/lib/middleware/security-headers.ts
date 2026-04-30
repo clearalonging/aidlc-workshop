@@ -9,10 +9,21 @@ export function applySecurityHeaders(
   request: NextRequest,
   response: NextResponse,
 ): NextResponse {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+
   // Content-Security-Policy
+  // 개발 환경: Next.js HMR, 인라인 스크립트 허용
+  // 프로덕션: 엄격한 CSP
+  const scriptSrc = isDevelopment
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self'";
+  const connectSrc = isDevelopment
+    ? "connect-src 'self' ws: wss:"
+    : "connect-src 'self'";
+
   response.headers.set(
     'Content-Security-Policy',
-    "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+    `default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; ${scriptSrc}; ${connectSrc}`,
   );
 
   // Strict-Transport-Security (HSTS)

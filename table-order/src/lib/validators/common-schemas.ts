@@ -33,7 +33,8 @@ export const menuItemSchema = z.object({
   price: z
     .number()
     .int('가격은 정수여야 합니다.')
-    .positive('가격은 0보다 커야 합니다.'),
+    .min(100, '가격은 100원 이상이어야 합니다.')
+    .max(1000000, '가격은 1,000,000원 이하여야 합니다.'),
   description: z.string().max(500, '설명은 500자 이내로 입력해 주세요.').optional(),
   imageUrl: z.string().url('올바른 URL 형식이 아닙니다.').max(2000).optional().or(z.literal('')),
   sortOrder: z.number().int().min(0).default(0),
@@ -88,3 +89,20 @@ export type UpdateMenuItemInput = z.infer<typeof updateMenuItemSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
 export type SetupTableInput = z.infer<typeof setupTableSchema>;
+
+// 메뉴 순서 이동 (위/아래)
+export const menuSwapOrderSchema = z.object({
+  direction: z.enum(['up', 'down'], {
+    errorMap: () => ({ message: '방향은 up 또는 down이어야 합니다.' }),
+  }),
+});
+
+// 관리자 메뉴 조회 쿼리
+export const adminMenuQuerySchema = z.object({
+  categoryId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+export type MenuSwapOrderInput = z.infer<typeof menuSwapOrderSchema>;
+export type AdminMenuQueryInput = z.infer<typeof adminMenuQuerySchema>;
